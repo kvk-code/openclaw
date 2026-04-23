@@ -132,6 +132,18 @@ export function resolveEmbeddedAgentStreamFn(params: {
   }
 
   const currentStreamFn = params.currentStreamFn ?? streamSimple;
+
+  if (params.shouldUseWebSocketTransport) {
+    return params.wsApiKey
+      ? createOpenAIWebSocketStreamFn(params.wsApiKey, params.sessionId, {
+          signal: params.signal,
+          managerOptions: {
+            request: getModelProviderRequestTransport(params.model),
+          },
+        })
+      : wrapStreamFnStripEmptyTools(currentStreamFn);
+  }
+
   if (params.model.provider === "anthropic-vertex") {
     return createAnthropicVertexStreamFnForModel(params.model);
   }
