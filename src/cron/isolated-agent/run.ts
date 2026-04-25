@@ -485,6 +485,8 @@ async function prepareCronRunContext(params: {
     agentId,
     nowMs: now,
     forceNew: input.job.sessionTarget === "isolated",
+    payloadModel: input.job.payload.kind === "agentTurn" ? input.job.payload.model : undefined,
+    isCronOwnedSession: (input.deliveryContract ?? "cron-owned") !== "shared",
   });
   const runSessionId = cronSession.sessionEntry.sessionId;
   if (!cronSession.sessionEntry.sessionFile?.trim()) {
