@@ -744,6 +744,11 @@ export async function initSessionState(params: {
     sessionEntry.outputTokens = undefined;
     sessionEntry.estimatedCostUsd = undefined;
     sessionEntry.contextTokens = undefined;
+    // Clear fallback notice fields so the new session doesn't show a stale
+    // "using <fallback model> because <reason>" banner from the old session.
+    sessionEntry.fallbackNoticeActiveModel = undefined;
+    sessionEntry.fallbackNoticeSelectedModel = undefined;
+    sessionEntry.fallbackNoticeReason = undefined;
   }
   // Preserve per-session overrides while resetting compaction state on /new.
   sessionStore[sessionKey] = { ...sessionStore[sessionKey], ...sessionEntry };
