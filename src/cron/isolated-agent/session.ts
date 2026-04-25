@@ -105,6 +105,8 @@ export function resolveCronSession(params: {
   nowMs: number;
   agentId: string;
   forceNew?: boolean;
+  payloadModel?: string;
+  isCronOwnedSession?: boolean;
 }) {
   const sessionCfg = params.cfg.session;
   const storePath = resolveStorePath(sessionCfg?.store, {
@@ -168,6 +170,17 @@ export function resolveCronSession(params: {
     sessionId,
     updatedAt: params.nowMs,
     systemSent,
+    // When an isolated cron session specifies its own payload model, clear
+    // model-selection overrides inherited from prior sessions.
+    ...(params.forceNew &&
+      params.payloadModel &&
+      params.isCronOwnedSession && {
+        providerOverride: undefined,
+        modelOverride: undefined,
+        fallbackNoticeActiveModel: undefined,
+        fallbackNoticeSelectedModel: undefined,
+        fallbackNoticeReason: undefined,
+      }),
   };
   return { storePath, store, sessionEntry, systemSent, isNewSession, previousSessionId };
 }
