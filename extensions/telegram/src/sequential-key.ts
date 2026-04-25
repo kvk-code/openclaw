@@ -48,6 +48,24 @@ function resolveStatusCommandControlLane(params: {
   return command?.category === "status" && command.key !== "export-session";
 }
 
+function resolveSessionControlCommand(params: { rawText?: string; botUsername?: string }): boolean {
+  // Session control commands (/new, /reset, /clear) must bypass the per-topic
+  // lane so they can interrupt a running agent. Without this, these commands
+  // get queued behind the active agent turn and the user cannot stop a runaway.
+  const normalizedBody = normalizeCommandBody(
+    params.rawText?.trim() ?? "",
+    params.botUsername ? { botUsername: params.botUsername } : undefined,
+  );
+  const alias = maybeResolveTextAlias(normalizedBody);
+  if (!alias) {
+    return false;
+  }
+  const command = listChatCommands().find((entry) =>
+    entry.textAliases.some((candidate) => candidate.trim().toLowerCase() === alias),
+  );
+  return command?.key === "new" || command?.key === "reset" || command?.key === "clear";
+}
+
 export function getTelegramSequentialKey(ctx: TelegramSequentialKeyContext): string {
   const reaction = ctx.update?.message_reaction;
   if (reaction?.chat?.id) {
@@ -72,6 +90,12 @@ export function getTelegramSequentialKey(ctx: TelegramSequentialKeyContext): str
     return "telegram:control";
   }
   if (resolveStatusCommandControlLane({ rawText, botUsername })) {
+    if (typeof chatId === "number") {
+      return `telegram:${chatId}:control`;
+    }
+    return "telegram:control";
+  }
+  if (resolveSessionControlCommand({ rawText, botUsername })) {
     if (typeof chatId === "number") {
       return `telegram:${chatId}:control`;
     }
