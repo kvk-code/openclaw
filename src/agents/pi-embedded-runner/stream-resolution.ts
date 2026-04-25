@@ -114,7 +114,7 @@ export function resolveEmbeddedAgentStreamFn(params: {
             request: getModelProviderRequestTransport(params.model),
           },
         })
-      : currentStreamFn;
+      : wrapStreamFnStripEmptyTools(currentStreamFn);
   }
 
   if (params.model.provider === "anthropic-vertex") {
@@ -124,9 +124,42 @@ export function resolveEmbeddedAgentStreamFn(params: {
   if (params.currentStreamFn === undefined || params.currentStreamFn === streamSimple) {
     const boundaryAwareStreamFn = createBoundaryAwareStreamFnForModel(params.model);
     if (boundaryAwareStreamFn) {
-      return boundaryAwareStreamFn;
+      // Wrap with empty-tools guard: strict OpenAI-compatible providers (DashScope/GLM, Kimi)
+      // reject requests containing tools: []. Omit the field entirely when no tools are present.
+      // Fixes #53174, #59898.
+      return wrapStreamFnStripEmptyTools(boundaryAwareStreamFn);
     }
   }
 
-  return currentStreamFn;
+  // Wrap with empty-tools guard for any custom stream function as well.
+  return wrapStreamFnStripEmptyTools(currentStreamFn);
+}
+
+/**
+ * Wraps a stream function to strip empty `tools` arrays from outgoing payloads.
+ * Strict OpenAI-compatible providers (DashScope/GLM, Kimi, vLLM) reject
+ * `tools: []` with HTTP 400. Omitting the field entirely is the correct
+ * behavior for tool-less requests.
+ */
+function wrapStreamFnStripEmptyTools(base: StreamFn): StreamFn {
+  return (model, context, options) => {
+    return base(model, context, {
+      ...options,
+      onPayload: (payload, model) => {
+        if (payload && typeof payload === "object") {
+          const p = payload as Record<string, unknown>;
+          if (Array.isArray(p.tools) && p.tools.length === 0) {
+            delete p.tools;
+          }
+          // Also strip tool_choice when tools are absent — some providers
+          // reject tool_choice without a corresponding tools array.
+          // Fixes #47947.
+          if (p.tool_choice !== undefined && p.tools === undefined) {
+            delete p.tool_choice;
+          }
+        }
+        return options?.onPayload?.(payload, model);
+      },
+    });
+  };
 }
