@@ -20,7 +20,7 @@ export const IRREDUCIBLE_OVERFLOW_ERROR_TEXT =
   "Context overflow: system prompt exceeds the model context window. " +
   "Reduce the system prompt size or use a larger-context model.";
 
-const ESTIMATED_CHARS_PER_TOKEN=***
+const ESTIMATED_CHARS_PER_TOKEN = 4;
 const TOOL_RESULT_CHARS_PER_TOKEN = 2;
 const JSON_PAYLOAD_CHARS_PER_TOKEN = 3;
 const MESSAGE_BOUNDARY_OVERHEAD_TOKENS = 12;
