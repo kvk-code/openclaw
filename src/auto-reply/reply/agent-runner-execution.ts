@@ -2988,6 +2988,15 @@ export async function runAgentTurnWithFallback(params: {
         });
       };
       if (embeddedError && isContextOverflowError(embeddedError.message)) {
+        // Skip session reset for exhausted/irreducible overflows to prevent infinite loops
+        const shouldSkipReset =
+          embeddedError.kind === "context_overflow_exhausted" ||
+          embeddedError.kind === "irreducible_overflow";
+        if (shouldSkipReset) {
+          defaultRuntime.warn(
+            `Skipping session reset for ${embeddedError.kind} to prevent infinite loop. sessionKey=${params.sessionKey ?? params.followupRun.run.sessionId}`,
+          );
+        }
         emitSettledLifecycleError(new Error(terminalErrorMessage ?? "Agent run failed"));
         defaultRuntime.error(
           `Auto-compaction failed (${embeddedError.message}). Preserving existing session mapping for ${params.sessionKey ?? params.followupRun.run.sessionId}.`,

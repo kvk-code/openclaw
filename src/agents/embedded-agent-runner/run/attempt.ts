@@ -497,6 +497,7 @@ import {
 } from "./midturn-precheck.js";
 import {
   PREEMPTIVE_OVERFLOW_ERROR_TEXT,
+  IRREDUCIBLE_OVERFLOW_ERROR_TEXT,
   buildPrePromptContextBudgetStatus,
   estimateLlmBoundaryTokenPressure,
   formatPrePromptPrecheckLog,
@@ -4644,6 +4645,24 @@ export async function runEmbeddedAttempt(
                 ...(params.sessionFile ? { sessionFile: params.sessionFile } : {}),
               }),
             );
+          }
+          if (preemptiveCompaction?.route === "irreducible_overflow") {
+            // The system prompt + user prompt alone exceeds the context
+            // budget. Compaction only removes history messages, so retrying
+            // would loop indefinitely burning event-loop time. Fail fast.
+            preflightRecovery = { route: "irreducible_overflow" };
+            promptError = new Error(IRREDUCIBLE_OVERFLOW_ERROR_TEXT);
+            promptErrorSource = "precheck";
+            log.error(
+              `[context-overflow-precheck] irreducible overflow: sessionKey=${params.sessionKey ?? params.sessionId} ` +
+                `provider=${params.provider}/${params.modelId} ` +
+                `route=${preemptiveCompaction.route} ` +
+                `estimatedPromptTokens=${preemptiveCompaction.estimatedPromptTokens} ` +
+                `promptBudgetBeforeReserve=${preemptiveCompaction.promptBudgetBeforeReserve} ` +
+                `overflowTokens=${preemptiveCompaction.overflowTokens} ` +
+                `sessionFile=${params.sessionFile}`,
+            );
+            skipPromptSubmission = true;
           }
           if (preemptiveCompaction?.route === "truncate_tool_results_only") {
             const toolResultMaxChars = resolveLiveToolResultMaxChars({

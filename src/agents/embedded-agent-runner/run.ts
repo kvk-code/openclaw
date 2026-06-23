@@ -2372,6 +2372,52 @@ async function runEmbeddedAgentInternal(
             !attempt.lastToolError &&
             (attempt.toolMetas?.length ?? 0) === 0 &&
             (attempt.assistantTexts?.length ?? 0) === 0;
+          // Irreducible overflow: system prompt + user prompt alone exceeds
+          // the context budget. Compaction cannot help — return immediately
+          // to avoid spinning through MAX_OVERFLOW_COMPACTION_ATTEMPTS of
+          // no-op compaction cycles (each burning ~20s of event loop time).
+          if (preflightRecovery?.route === "irreducible_overflow") {
+            const errorText = promptError
+              ? formatErrorMessage(promptError)
+              : "Context overflow: system prompt exceeds the model context window.";
+            log.error(
+              `[context-overflow-diag] irreducible overflow — skipping compaction entirely. ` +
+                `sessionKey=${params.sessionKey ?? params.sessionId} ` +
+                `provider=${provider}/${modelId} sessionFile=${activeSessionFile}`,
+            );
+            setTerminalLifecycleMeta({
+              replayInvalid: resolveReplayInvalidForAttempt(),
+              livenessState: "blocked",
+            });
+            return {
+              payloads: [
+                {
+                  text:
+                    "Context overflow: system prompt exceeds the model context window. " +
+                    "Reduce the number of skills/plugins or use a larger-context model.",
+                  isError: true,
+                },
+              ],
+              meta: {
+                durationMs: Date.now() - started,
+                agentMeta: buildErrorAgentMeta({
+                  sessionId: sessionIdUsed,
+                  provider,
+                  model: model.id,
+                  contextTokens: ctxInfo.tokens,
+                  usageAccumulator,
+                  lastRunPromptUsage,
+                  lastAssistant: sessionLastAssistant,
+                  lastTurnTotal,
+                }),
+                systemPromptReport: attempt.systemPromptReport,
+                finalPromptText: attempt.finalPromptText,
+                replayInvalid: resolveReplayInvalidForAttempt(),
+                livenessState: "blocked",
+                error: { kind: "irreducible_overflow", message: errorText },
+              },
+            };
+          }
           if (preflightRecovery?.handled) {
             const retryingFromTranscript = preflightRecovery.source === "mid-turn";
             log.info(
@@ -2861,7 +2907,11 @@ async function runEmbeddedAgentInternal(
                   `attempt=${overflowCompactionAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
               );
             }
-            const kind = isCompactionFailure ? "compaction_failure" : "context_overflow";
+            const kind = isCompactionFailure
+              ? "compaction_failure"
+              : overflowCompactionAttempts >= MAX_OVERFLOW_COMPACTION_ATTEMPTS
+                ? "context_overflow_exhausted"
+                : "context_overflow";
             const overflowRecoveryText =
               "Context overflow: prompt too large for the model. " +
               "Try /reset (or /new) to start a fresh session, or use a larger-context model.";

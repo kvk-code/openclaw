@@ -156,6 +156,8 @@ export type EmbeddedAgentRunMeta = {
   error?: {
     kind:
       | "context_overflow"
+      | "context_overflow_exhausted"
+      | "irreducible_overflow"
       | "compaction_failure"
       | "role_ordering"
       | "image_size"
